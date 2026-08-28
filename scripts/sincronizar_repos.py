@@ -232,37 +232,24 @@ def main():
 if __name__ == "__main__":
     main()
 
-def _git_env_con_token(token):
-    """Configura Git HTTPS con Basic Auth usando x-access-token sin mostrar el token."""
+def _git_auth_env(token):
     import base64
-    credenciales = f"x-access-token:{token}".encode("utf-8")
-    encoded = base64.b64encode(credenciales).decode("ascii")
+    raw = f"x-access-token:{token}".encode("utf-8")
+    encoded = base64.b64encode(raw).decode("ascii")
     env = os.environ.copy()
     env["GIT_CONFIG_COUNT"] = "1"
     env["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader"
     env["GIT_CONFIG_VALUE_0"] = f"AUTHORIZATION: Basic {encoded}"
     return env
 
-def _git_url(repo):
+def _git_https_url(repo):
     return f"https://github.com/{repo}.git"
 
-def _probar_git_https(repo, token):
-    """Prueba lectura Git real antes de crear/modificar ramas."""
-    url = _git_url(repo)
-    print(f"[TEST] Git HTTPS: {repo}")
-    env = _git_env_con_token(token)
-    p = subprocess.run(
-        ["git", "-c", "credential.helper=", "ls-remote", url, "HEAD"],
-        env=env,
-        capture_output=True,
-        text=True,
+def _git_ls_remote(repo, token):
+    env = _git_auth_env(token)
+    return subprocess.run(
+        ["git", "-c", "credential.helper=", "ls-remote",
+         _git_https_url(repo), "HEAD"],
+        env=env, capture_output=True, text=True
     )
-    if p.returncode == 0:
-        print("[OK] Git HTTPS autenticado.")
-        return True
-    print("[FAIL] Git HTTPS no puede acceder al repositorio.")
-    err = (p.stderr or p.stdout or "").strip()
-    if err:
-        print("[GIT ERROR] " + err)
-    return False
 

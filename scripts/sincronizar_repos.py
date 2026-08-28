@@ -169,6 +169,32 @@ def publicar_rama(remote_auth, token, repo, rama):
 # MAIN
 # --------------------------------------------------------------------------
 
+def verificar_acceso_repo(token, repo):
+    """Consulta la API de GitHub para saber si el token puede ver el repo
+    y así distinguir 'no existe' de 'sin permiso' de 'token invalido'."""
+    api_url = f"https://api.github.com/repos/{repo}"
+    req = urllib.request.Request(api_url, headers={
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    })
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            print(f"[DEBUG] La API confirma que el repo existe y es visible: {data.get('full_name')} (privado: {data.get('private')})")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"[DEBUG] La API de GitHub responde 404 para '{repo}': o el repo no existe con ese nombre exacto, o el token no tiene permiso para verlo.")
+        elif e.code == 401:
+            print(f"[DEBUG] La API de GitHub responde 401: el token es inválido o ha caducado.")
+        elif e.code == 403:
+            print(f"[DEBUG] La API de GitHub responde 403: el token no tiene permisos suficientes sobre este repo.")
+        else:
+            print(f"[DEBUG] La API de GitHub respondió con error {e.code}: {e.read().decode('utf-8', errors='ignore')}")
+    except Exception as e:
+        print(f"[DEBUG] Error al consultar la API de GitHub: {e}")
+
+
 def configurar_identidad_git():
     ejecutar_cmd(["git", "config", "--global", "user.email", "actions@github.com"])
     ejecutar_cmd(["git", "config", "--global", "user.name", "GitHub Actions"])
@@ -186,6 +212,11 @@ def main():
         sys.exit(1)
 
     remote_auth = f"https://x-access-token:{token}@github.com/{repo_privado}.git"
+
+    print(f"[DEBUG] Repo privado destino: '{repo_privado}' (longitud: {len(repo_privado)})")
+    print(f"[DEBUG] Token presente: {'sí' if token else 'no'} (longitud: {len(token) if token else 0}, primeros 4 chars: {token[:4] if token else 'N/A'})")
+
+    verificar_acceso_repo(token, repo_privado)
 
     ejecutar_cmd(["git", "fetch", "--all", "--prune"], check=False)
 

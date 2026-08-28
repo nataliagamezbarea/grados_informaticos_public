@@ -2,12 +2,14 @@
 """
 MAESTRO -> PRIVADO
 
-Usa EXACTAMENTE la misma lógica de ramas que el público (sync_common.py):
-- Si la rama no existe y NO es main/master → se crea por API con commit vacío.
-- Si es main/master y no existe → error (no se autocrean nunca).
+Sincroniza el historial real commit-a-commit hacia el repositorio PRIVADO,
+sin usar la API de GitHub para crear ramas (porque eso falla si el repo
+está vacío). Aquí TODO se hace con git:
 
-Luego, a diferencia del público, el contenido NO se sincroniza por API:
-se envía el historial real commit-a-commit con `git push --force`.
+- Si la rama no existe → se crea con commit vacío usando git.
+- Luego se publican todos los commits reales con `git push --force`.
+
+Esto evita completamente el error 409 "Git Repository is empty".
 """
 
 import os
@@ -16,9 +18,6 @@ import json
 import subprocess
 import urllib.request
 import urllib.error
-
-# 🔥 IMPORTA SOLO LO NECESARIO DEL PÚBLICO
-from sync_common import asegurar_rama, RAMAS_SIN_AUTOCREAR
 
 SCHEMA = "grados-informaticos"
 RAMAS_EXCLUIDAS = {"master", "main", "gh-pages"}
@@ -101,12 +100,51 @@ def obtener_commits_rama(rama):
 
 
 # --------------------------------------------------------------------------
+# CREACIÓN DE RAMAS EN PRIVADO (solo git, sin API)
+# --------------------------------------------------------------------------
+
+def branch_exists(remote_auth, rama):
+    res = subprocess.run(
+        ["git", "ls-remote", "--heads", remote_auth, rama],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    return res.stdout.strip() != ""
+
+
+def crear_rama_vacia(remote_auth, rama):
+    print(f"[INFO] Creando rama vacía en PRIVADO: {rama}")
+
+    ejecutar_cmd(["git", "checkout", "--orphan", f"temp_{rama}"])
+    ejecutar_cmd(["git", "rm", "-rf", "."])
+    ejecutar_cmd(["git", "commit", "--allow-empty", "-m", f"Crear rama {rama} vacía"])
+
+    sha = ejecutar_cmd(["git", "rev-parse", "HEAD"])
+
+    res = subprocess.run(
+        ["git", "push", remote_auth, f"{sha}:refs/heads/{rama}"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+
+    if res.returncode != 0:
+        print(f"[FATAL] No se pudo crear la rama {rama} en el repo privado.")
+        print(res.stderr)
+        sys.exit(1)
+
+    ejecutar_cmd(["git", "checkout", "-"])
+    print(f"[OK] Rama {rama} creada en PRIVADO.")
+
+
+def asegurar_rama(remote_auth, rama):
+    if not branch_exists(remote_auth, rama):
+        crear_rama_vacia(remote_auth, rama)
+
+
+# --------------------------------------------------------------------------
 # Publicación commit-a-commit
 # --------------------------------------------------------------------------
 
 def publicar_rama(remote_auth, token, repo, rama):
-    # 🔥 Igual que el público: asegurar que la rama exista (API GitHub)
-    asegurar_rama(token, repo, rama)
+    asegurar_rama(remote_auth, rama)
 
     commits = obtener_commits_rama(rama)
     if not commits:

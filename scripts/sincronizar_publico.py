@@ -60,7 +60,7 @@ from urllib.request import Request, urlopen
 
 SCHEMA = "grados-informaticos"
 GITHUB_API = "https://api.github.com"
-RAMAS_SIN_AUTOCREAR = {}  # estas NUNCA se crean automáticamente
+RAMAS_SIN_AUTOCREAR = set()
 
 
 def github_request(token, method, path, data=None, accept=None):

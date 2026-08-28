@@ -169,7 +169,14 @@ def publicar_rama(remote_auth, token, repo, rama):
 # MAIN
 # --------------------------------------------------------------------------
 
+def configurar_identidad_git():
+    ejecutar_cmd(["git", "config", "--global", "user.email", "actions@github.com"])
+    ejecutar_cmd(["git", "config", "--global", "user.name", "GitHub Actions"])
+
+
 def main():
+    configurar_identidad_git()
+
     token, repo_privado = obtener_credenciales_privado()
     if not token:
         print("[FATAL] No se encontró el token de GitHub (gh_token).")

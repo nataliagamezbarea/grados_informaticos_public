@@ -211,7 +211,7 @@ def main():
         print("[FATAL] No se definió el repositorio privado (gh_repo).")
         sys.exit(1)
 
-    remote_auth = f"https://github.com/{repo_privado}.git"
+    remote_auth = f"https://x-access-token:{token}@github.com/{repo_privado}.git"
 
     print(f"[DEBUG] Repo privado destino: '{repo_privado}' (longitud: {len(repo_privado)})")
     print(f"[DEBUG] Token presente: {'sí' if token else 'no'} (longitud: {len(token) if token else 0}, primeros 4 chars: {token[:4] if token else 'N/A'})")
@@ -231,25 +231,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-def _git_auth_env(token):
-    import base64
-    raw = f"x-access-token:{token}".encode("utf-8")
-    encoded = base64.b64encode(raw).decode("ascii")
-    env = os.environ.copy()
-    env["GIT_CONFIG_COUNT"] = "1"
-    env["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader"
-    env["GIT_CONFIG_VALUE_0"] = f"AUTHORIZATION: Basic {encoded}"
-    return env
-
-def _git_https_url(repo):
-    return f"https://github.com/{repo}.git"
-
-def _git_ls_remote(repo, token):
-    env = _git_auth_env(token)
-    return subprocess.run(
-        ["git", "-c", "credential.helper=", "ls-remote",
-         _git_https_url(repo), "HEAD"],
-        env=env, capture_output=True, text=True
-    )
-

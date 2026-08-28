@@ -2,22 +2,12 @@
 """
 MAESTRO -> PRIVADO
 
-Reutiliza de sync_common.py la MISMA función que usa el público para
-asegurar que la rama existe en el destino (asegurar_rama: si no existe,
-la crea por API con un commit vacío; main/master nunca se autocrean).
+Usa EXACTAMENTE la misma lógica de ramas que el público (sync_common.py):
+- Si la rama no existe y NO es main/master → se crea por API con commit vacío.
+- Si es main/master y no existe → error (no se autocrean nunca).
 
-A diferencia del público, el CONTENIDO no se sincroniza vía API de
-contenidos: aquí se envía el historial real, commit a commit, con
-`git push --force`.
-
-El --force es necesario porque el commit vacío que crea asegurar_rama()
-no tiene relación de parentesco con el historial real de MAESTRO (es un
-commit sin padres, con árbol vacío). Un `git push` normal del primer
-commit real sobre esa rama sería rechazado por non-fast-forward, ya que
-Git ve dos historias no relacionadas. Como el privado es un espejo del
-historial de MAESTRO, forzar el push en cada commit es seguro: la
-referencia del privado se deriva completamente de MAESTRO, no hay cambios
-propios que se puedan perder.
+Luego, a diferencia del público, el contenido NO se sincroniza por API:
+se envía el historial real commit-a-commit con `git push --force`.
 """
 
 import os
@@ -27,6 +17,7 @@ import subprocess
 import urllib.request
 import urllib.error
 
+# 🔥 IMPORTA SOLO LO NECESARIO DEL PÚBLICO
 from sync_common import asegurar_rama, RAMAS_SIN_AUTOCREAR
 
 SCHEMA = "grados-informaticos"
@@ -34,8 +25,7 @@ RAMAS_EXCLUIDAS = {"master", "main", "gh-pages"}
 
 
 # --------------------------------------------------------------------------
-# Credenciales (Supabase configuracion_privada, con fallback a variables
-# de entorno)
+# Credenciales desde Supabase (configuracion_privada)
 # --------------------------------------------------------------------------
 
 def obtener_env_supabase():
@@ -59,22 +49,9 @@ def consultar_supabase(tabla, clave_buscar):
     try:
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            if data and len(data) > 0:
-                if len(data) > 1:
-                    print(
-                        f"[WARN] {tabla}.{clave_buscar} tiene {len(data)} filas "
-                        f"duplicadas; se usará la primera devuelta por Supabase."
-                    )
+            if data:
                 valor = data[0].get("valor")
-                if isinstance(valor, str):
-                    valor_limpio = valor.strip()
-                    if valor_limpio != valor:
-                        print(
-                            f"[WARN] {tabla}.{clave_buscar} tenía espacios/"
-                            f"saltos de línea sobrantes; se han recortado."
-                        )
-                    return valor_limpio
-                return valor
+                return valor.strip() if isinstance(valor, str) else valor
     except Exception as e:
         print(f"[WARN] Error consultando Supabase ({tabla}.{clave_buscar}): {e}")
     return None
@@ -93,7 +70,7 @@ def obtener_credenciales_privado():
 
 
 # --------------------------------------------------------------------------
-# Git local (sobre el checkout completo de MAESTRO)
+# Git local (checkout completo de MAESTRO)
 # --------------------------------------------------------------------------
 
 def ejecutar_cmd(cmd, check=True):
@@ -124,13 +101,11 @@ def obtener_commits_rama(rama):
 
 
 # --------------------------------------------------------------------------
-# Publicación commit a commit
+# Publicación commit-a-commit
 # --------------------------------------------------------------------------
 
 def publicar_rama(remote_auth, token, repo, rama):
-    # Igual que el público: asegura que la rama exista en el destino
-    # (la crea por API con commit vacío si hace falta; main/master nunca
-    # se autocrean, aunque de todas formas ya están excluidas antes).
+    # 🔥 Igual que el público: asegurar que la rama exista (API GitHub)
     asegurar_rama(token, repo, rama)
 
     commits = obtener_commits_rama(rama)
@@ -141,14 +116,20 @@ def publicar_rama(remote_auth, token, repo, rama):
     print(f"PRIVADO: {rama} -> publicando {len(commits)} commits UNO A UNO.")
     for i, commit in enumerate(commits, 1):
         print(f"PRIVADO: {rama} commit {i}/{len(commits)} -> {commit}")
+
         res_push = subprocess.run(
             ["git", "push", "--force", remote_auth, f"{commit}:refs/heads/{rama}"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
+
         if res_push.returncode != 0:
             print(f"ERROR: {res_push.stderr.strip()}")
             sys.exit(1)
 
+
+# --------------------------------------------------------------------------
+# MAIN
+# --------------------------------------------------------------------------
 
 def main():
     token, repo_privado = obtener_credenciales_privado()
@@ -174,4 +155,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

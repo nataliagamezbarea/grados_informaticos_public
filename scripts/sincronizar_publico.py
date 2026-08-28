@@ -60,7 +60,7 @@ from urllib.request import Request, urlopen
 
 SCHEMA = "grados-informaticos"
 GITHUB_API = "https://api.github.com"
-RAMA_SIN_AUTOCREAR = "main"  # esta rama NUNCA se crea automáticamente
+RAMAS_SIN_AUTOCREAR = {"main", "master"}  # estas NUNCA se crean automáticamente
 
 
 def github_request(token, method, path, data=None, accept=None):
@@ -312,7 +312,8 @@ def asegurar_rama(token, repo, branch):
     """
     Si branch ya existe, no hace nada.
     Si no existe:
-      - Si branch == "main": NUNCA se crea. Lanza error.
+      - Si branch está en RAMAS_SIN_AUTOCREAR (main, master): NUNCA se
+        crea. Lanza error.
       - Si branch es cualquier otra: se crea vacía (commit vacío), sin
         depender de si el archivo que se está sincronizando en este push
         es una creación o un borrado.
@@ -320,7 +321,7 @@ def asegurar_rama(token, repo, branch):
     if branch_exists(token, repo, branch):
         return
 
-    if branch == RAMA_SIN_AUTOCREAR:
+    if branch in RAMAS_SIN_AUTOCREAR:
         raise RuntimeError(
             f"La rama {branch} no existe en {repo} y no se autocrea nunca. "
             f"Créala manualmente si quieres publicar ahí."
@@ -331,12 +332,18 @@ def asegurar_rama(token, repo, branch):
 
 def locate(token, repo, master_path, branch):
     """
-    Devuelve (branch, path, current_contents) buscando SOLO por nombre
-    con GitHub Code Search (no hay tabla de mapeo ni ruta preconfigurada).
+    Devuelve (branch, path, current_contents).
 
-    - 0 coincidencias -> se publicará en la misma ruta que en MAESTRO.
-    - 1 coincidencia  -> se usa esa ruta encontrada.
-    - >1 coincidencia -> AMBIGUO, no se toca nada.
+    1) Intenta localizarlo con GitHub Code Search por nombre exacto (rápido,
+       pero SOLO indexa de forma fiable la rama por defecto del repo).
+    2) Si Code Search no da una coincidencia válida en ESTA rama/ruta
+       (0 coincidencias, o coincidencia que no está ahí realmente), se
+       comprueba directamente con la API de Contents sobre la rama de
+       destino y la ruta de MAESTRO. Esto es necesario porque ya no
+       publicamos nada en la rama por defecto, así que Code Search casi
+       nunca la encuentra aunque el archivo ya exista ahí.
+
+    - >1 coincidencia de Code Search -> AMBIGUO, no se toca nada.
     """
     filename = Path(master_path).name
     matches = search_exact_filename(token, repo, filename)
@@ -350,14 +357,25 @@ def locate(token, repo, master_path, branch):
 
     if len(matches) == 1:
         path = matches[0]["path"]
-        print(
-            "LOCALIZADO POR CODE SEARCH:",
-            f"{repo}:{branch}/{path}"
-        )
-        return branch, path, get_contents(token, repo, path, branch)
+        current = get_contents(token, repo, path, branch)
+        if current:
+            print(
+                "LOCALIZADO POR CODE SEARCH:",
+                f"{repo}:{branch}/{path}"
+            )
+            return branch, path, current
+        # Code Search lo indexó (probablemente desde la rama por defecto)
+        # pero no está en esa ruta dentro de ESTA rama -> se sigue abajo
+        # con la comprobación directa en la ruta de MAESTRO.
 
     fallback_path = normalize_path(master_path)
-    return branch, fallback_path, None
+    current = get_contents(token, repo, fallback_path, branch)
+    if current:
+        print(
+            "LOCALIZADO POR COMPROBACIÓN DIRECTA:",
+            f"{repo}:{branch}/{fallback_path}"
+        )
+    return branch, fallback_path, current
 
 
 def sync_archivo(master_dir, token, repo, master_path, branch):
@@ -384,18 +402,33 @@ def sync_archivo(master_dir, token, repo, master_path, branch):
 def main():
     token, repo = get_config()
 
+    ramas_maestro = [
+        r.strip()
+        for r in os.environ.get("MAESTRO_BRANCHES", "").splitlines()
+        if r.strip()
+    ]
+    for rama in ramas_maestro:
+        asegurar_rama(token, repo, rama)
+
     changed = [
         p.strip()
         for p in os.environ.get("PUBLIC_CHANGED_FILES", "").splitlines()
         if p.strip()
     ]
 
+    ignorados = [p for p in changed if normalize_path(p).startswith(".github/workflows/")]
+    if ignorados:
+        print("IGNORADOS (no se publican en el público):", ", ".join(ignorados))
+    changed = [p for p in changed if not normalize_path(p).startswith(".github/workflows/")]
+
     if not changed:
         print("No hay archivos modificados que publicar.")
         return
 
     master_dir = os.environ["GITHUB_WORKSPACE"]
-    branch = os.environ.get("PUBLIC_BRANCH") or RAMA_SIN_AUTOCREAR
+    branch = os.environ.get("PUBLIC_BRANCH")
+    if not branch:
+        raise RuntimeError("Falta PUBLIC_BRANCH en el entorno (github.ref_name).")
 
     for master_path in changed:
         sync_archivo(master_dir, token, repo, master_path, branch)

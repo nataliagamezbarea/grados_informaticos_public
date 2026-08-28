@@ -1,3 +1,4 @@
+import base64
 #!/usr/bin/env python3
 """
 MAESTRO -> PRIVADO
@@ -26,6 +27,21 @@ RAMAS_EXCLUIDAS = {"master", "main", "gh-pages"}
 # --------------------------------------------------------------------------
 # Credenciales desde Supabase (configuracion_privada)
 # --------------------------------------------------------------------------
+
+
+def git_env_with_token(token):
+    """Environment for GitHub HTTPS using HTTP Basic auth.
+
+    GitHub accepts the PAT/token as the password and x-access-token as the
+    username. This avoids the 'Repository not found' failure caused by using
+    Bearer auth for Git transport.
+    """
+    env = os.environ.copy()
+    auth = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    env["GIT_CONFIG_COUNT"] = "1"
+    env["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader"
+    env["GIT_CONFIG_VALUE_0"] = f"Authorization: Basic {auth}"
+    return env
 
 def obtener_env_supabase():
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -73,7 +89,7 @@ def obtener_credenciales_privado():
 # --------------------------------------------------------------------------
 
 def ejecutar_cmd(cmd, check=True):
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    res = subprocess.run(cmd, env=git_env_with_token(gh_token), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if check and res.returncode != 0:
         print(f"ERROR: {res.stderr.strip()}")
         sys.exit(res.returncode)
@@ -107,7 +123,7 @@ def branch_exists(remote_auth, rama):
     res = subprocess.run(
         ["git", "ls-remote", "--heads", remote_auth, rama],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
+    , env=git_env_with_token(gh_token))
     return res.stdout.strip() != ""
 
 
@@ -123,7 +139,7 @@ def crear_rama_vacia(remote_auth, rama):
     res = subprocess.run(
         ["git", "push", remote_auth, f"{sha}:refs/heads/{rama}"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
+    , env=git_env_with_token(gh_token))
 
     if res.returncode != 0:
         print(f"[FATAL] No se pudo crear la rama {rama} en el repo privado.")
@@ -158,7 +174,7 @@ def publicar_rama(remote_auth, token, repo, rama):
         res_push = subprocess.run(
             ["git", "push", "--force", remote_auth, f"{commit}:refs/heads/{rama}"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
+        , env=git_env_with_token(gh_token))
 
         if res_push.returncode != 0:
             print(f"ERROR: {res_push.stderr.strip()}")

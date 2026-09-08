@@ -1,0 +1,18 @@
+{
+  "name": "UD2.5-Presentacin_Comunitaria.pdf",
+  "path": "archivos/UD2.5-Presentacin_Comunitaria.pdf",
+  "sha": "2ca06177ee892da442d2718879c81c6b516a2368",
+  "size": 3247418,
+  "url": "https://api.github.com/repos/nataliagamezbarea/grados_informaticos_privado/contents/archivos/UD2.5-Presentacin_Comunitaria.pdf?ref=Primer_grado_medio",
+  "html_url": "https://github.com/nataliagamezbarea/grados_informaticos_privado/blob/Primer_grado_medio/archivos/UD2.5-Presentacin_Comunitaria.pdf",
+  "git_url": "https://api.github.com/repos/nataliagamezbarea/grados_informaticos_privado/git/blobs/2ca06177ee892da442d2718879c81c6b516a2368",
+  "download_url": "https://raw.githubusercontent.com/nataliagamezbarea/grados_informaticos_privado/Primer_grado_medio/archivos/UD2.5-Presentacin_Comunitaria.pdf?token=BCK5ETQTNJ4ZDISRJPGRJS3KTZLMVAA",
+  "type": "file",
+  "content": "",
+  "encoding": "none",
+  "_links": {
+    "self": "https://api.github.com/repos/nataliagamezbarea/grados_informaticos_privado/contents/archivos/UD2.5-Presentacin_Comunitaria.pdf?ref=Primer_grado_medio",
+    "git": "https://api.github.com/repos/nataliagamezbarea/grados_informaticos_privado/git/blobs/2ca06177ee892da442d2718879c81c6b516a2368",
+    "html": "https://github.com/nataliagamezbarea/grados_informaticos_privado/blob/Primer_grado_medio/archivos/UD2.5-Presentacin_Comunitaria.pdf"
+  }
+}
